@@ -42,4 +42,23 @@ training_data/
 
 # OS
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Data and models
+*.npy
+*.json
+*.png
+archive.zip
+kaggle_processed_data/
+asl_data/
+feedback_data/
+
+# Test scripts
+test_*.py
+*_basic.py
+*_simple.py
+*_quick.py
+*_window.py
+
+# VSCode settings
+.vscode/ 

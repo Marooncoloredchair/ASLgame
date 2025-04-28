@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ASL Letter Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .video-container {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            margin: 20px auto;
+            border: 2px solid #333;
+            border-radius: 5px;
+        }
+        .game-info {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+        }
+        .score {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .word-display {
+            font-size: 32px;
+            margin: 10px 0;
+            color: #2c3e50;
+        }
+        .current-letter {
+            font-size: 48px;
+            font-weight: bold;
+            color: #27ae60;
+            margin: 20px 0;
+        }
+        .category {
+            font-size: 18px;
+            color: #7f8c8d;
+        }
+        .instructions {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .detection-info {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #e3f2fd;
+            border-radius: 5px;
+        }
+        .detected-letter {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1976d2;
+        }
+        .confidence {
+            font-size: 18px;
+            color: #424242;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        .progress {
+            width: 0%;
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.1s linear;
+        }
+        .status-message {
+            margin-top: 10px;
+            font-weight: bold;
+            min-height: 1.5em;
+        }
+        .status-correct {
+            color: #4CAF50;
+        }
+        .status-holding {
+            color: #FFC107;
+        }
+        .status-incorrect {
+            color: #F44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ASL Letter Game</h1>
+        
+        <div class="game-info">
+            <div class="score">Score: <span id="score">0</span></div>
+            <div class="category">Category: <span id="category"></span></div>
+            <div class="word-display">Word: <span id="word"></span></div>
+            <div class="current-letter">Current Letter: <span id="current-letter"></span></div>
+        </div>
+
+        <div class="detection-info">
+            <div class="detected-letter">Detected: <span id="detected-letter">-</span></div>
+            <div class="confidence">Confidence: <span id="confidence">-</span></div>
+            <div class="progress-bar">
+                <div class="progress" id="hold-progress"></div>
+            </div>
+            <div class="status-message" id="status-message"></div>
+        </div>
+
+        <div class="video-container">
+            <img src="{{ url_for('video_feed') }}" width="640" height="480">
+        </div>
+
+        <div class="instructions">
+            <h3>How to Play:</h3>
+            <ol>
+                <li>Show your hand sign clearly in the camera</li>
+                <li>Hold the sign steady until it's detected</li>
+                <li>Complete the word by signing each letter in sequence</li>
+                <li>Get points for each completed word</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        let gameState = {
+            score: 0,
+            word: '',
+            currentLetter: '',
+            category: '',
+            holdStartTime: null
+        };
+
+        function updateGameInfo(data) {
+            document.getElementById('score').textContent = gameState.score;
+            document.getElementById('category').textContent = data.category;
+            document.getElementById('word').textContent = data.word;
+            document.getElementById('current-letter').textContent = data.current_letter;
+            
+            gameState.word = data.word;
+            gameState.currentLetter = data.current_letter;
+            gameState.category = data.category;
+        }
+
+        function updateDetectionInfo(letter, confidence, status) {
+            const detectedLetterEl = document.getElementById('detected-letter');
+            const confidenceEl = document.getElementById('confidence');
+            const progressEl = document.getElementById('hold-progress');
+            const statusEl = document.getElementById('status-message');
+
+            detectedLetterEl.textContent = letter || '-';
+            confidenceEl.textContent = confidence ? `${(confidence * 100).toFixed(1)}%` : '-';
+
+            // Update progress bar and status message
+            if (status === 'holding') {
+                progressEl.style.width = '100%';
+                statusEl.textContent = 'Hold the sign steady...';
+                statusEl.className = 'status-message status-holding';
+            } else {
+                progressEl.style.width = '0%';
+                if (status === 'correct') {
+                    statusEl.textContent = 'Correct!';
+                    statusEl.className = 'status-message status-correct';
+                } else if (status === 'incorrect') {
+                    statusEl.textContent = 'Try again';
+                    statusEl.className = 'status-message status-incorrect';
+                } else {
+                    statusEl.innerHTML = '&nbsp;';
+                }
+            }
+        }
+
+        function startGame() {
+            fetch('/start_game')
+                .then(response => response.json())
+                .then(data => {
+                    updateGameInfo(data);
+                });
+        }
+
+        // Start the game when the page loads
+        window.onload = startGame;
+
+        // Check for letter detection every 100ms
+        setInterval(() => {
+            fetch('/game_status')
+                .then(response => response.json())
+                .then(data => {
+                    // Update all UI elements from atomic backend state
+                    document.getElementById('detected-letter').textContent = data.detected_letter || '-';
+                    document.getElementById('confidence').textContent = data.confidence ? `${(data.confidence * 100).toFixed(1)}%` : '-';
+                    document.getElementById('score').textContent = data.score;
+                    document.getElementById('category').textContent = data.category;
+                    document.getElementById('word').textContent = data.word;
+                    document.getElementById('current-letter').textContent = data.current_letter;
+
+                    // Always update detection info
+                    updateDetectionInfo(data.detected_letter, data.confidence, data.status);
+
+                    // If status is correct or holding, call /check_letter to advance game state
+                    if ((data.status === 'correct' || data.status === 'holding') && data.current_letter) {
+                        fetch(`/check_letter/${data.current_letter}`)
+                            .then(response => response.json())
+                            .then(result => {
+                                // If word completed, start new word
+                                if (result.status === 'completed') {
+                                    gameState.score = result.score;
+                                    startGame();
+                                } else if (result.status === 'correct') {
+                                    gameState.currentLetter = result.next_letter;
+                                    document.getElementById('current-letter').textContent = result.next_letter;
+                                }
+                            });
+                    }
+                });
+        }, 100);
+    </script>
+</body>
+</html> 
